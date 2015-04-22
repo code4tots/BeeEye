@@ -1,17 +1,7 @@
-"""
+import operator
+import sys
 
-4 object types
-
-	str
-	list
-	dict
-	macro
-
-Only str and list are used in the ast.
-
-"""
-
-BUILTINS = dict()
+BUILTINS = set()
 
 PRELUDE = """
 """
@@ -22,44 +12,51 @@ def wrap_function(f):
 	builtin_function.__name__ = f.__name__
 	return builtin_function
 
-def add_builtin(name, f):
-	BUILTINS[name] = f
-	return f
-
 def add_builtin_macro(macro):
-	return add_builtin(macro.__name__[len('be_'):], macro)
+	BUILTINS.add(macro)
+	return macro
 
 def add_builtin_function(builtin):
 	return add_builtin_macro(wrap_function(builtin))
 
-def new_global_scope():
-	return [dict(BUILTINS), '']
+class Scope(object):
 
-def new_local_scope(parent):
-	return [dict(), parent]
+	def __init__(self):
+		self.table = dict()
 
-def scope_lookup(scope, key):
-	table, parent = scope
-	if key in table:
-		return table[key]
-	if parent == '':
-		raise KeyError(key)
-	return scope_lookup(parent, key)
+	def declare(self, key, val):
+		self.table[key] = val
 
-def scope_def(scope, key, val):
-	table, parent = scope
-	if key in table:
-		raise ValueError(key + ' already declared')
-	table[key] = val
+class GlobalScope(Scope):
 
-def scope_assign(scope, key, val):
-	table, parent = scope
-	if key in table:
-		table[key] = val
-		return val
-	if parent == '':
-		raise KeyError(key)
-	return scope_assign(parent, key, val)
+	def __init__(self):
+		super(GlobalScope, self).__init__()
+		for builtin in BUILTINS:
+			self.declare(builtin.__name__[len('be_'):], builtin)
+
+	def __setitem__(self, key, val):
+		if key not in self.table:
+			raise KeyError(key)
+
+		self.table[key] = val
+
+	def __getitem__(self, key):
+		return self.table[key]
+
+class LocalScope(Scope):
+
+	def __init__(self, parent):
+		super(LocalScope, self).__init__()
+		self.parent = parent
+
+	def __setitem__(self, key, val):
+		if key in self.table:
+			self.table[key] = val
+		else:
+			self.parent[key] = val
+
+	def __getitem__(self, key):
+		return (self.table if key in self.table else self.parent)[key]
 
 def parse(s, pi=None):
 	pi = pi or [0]
@@ -132,7 +129,7 @@ def parse_one(s, pi=None):
 def eval_(d, scope):
 	if isinstance(d, str):
 		if d.startswith('$'):
-			return scope_lookup(scope, d[1:])
+			return scope[d[1:]]
 		else:
 			return d
 
@@ -140,7 +137,7 @@ def eval_(d, scope):
 		f = eval_(d[0], scope)
 
 		if isinstance(f, str):
-			f = scope_lookup(scope, f)
+			f = scope[f]
 
 		return f(d[1:], scope)
 
@@ -154,10 +151,10 @@ def eval_all(dd, scope):
 	return last
 
 def run(string, scope):
-	return eval_all(parse(string), scope or new_global_scope())
+	return eval_all(parse(string), scope or GlobalScope())
 
 def exec_(string, scope=None):
-	scope = scope or new_global_scope()
+	scope = scope or GlobalScope()
 	run(PRELUDE, scope)
 	return run(string, scope)
 
@@ -213,9 +210,9 @@ def be_lambda(args, scope):
 
 	@wrap_function
 	def lambda_(*args):
-		body_scope = new_local_scope(scope)
+		body_scope = LocalScope(scope)
 		for name, arg in zip(arg_names, args):
-			scope_def(body_scope, name, arg)
+			body_scope.declare(name, arg)
 		return eval_all(body, body_scope)
 
 	return lambda_
@@ -224,7 +221,7 @@ def be_lambda(args, scope):
 def be_def(args, scope):
 	name, val = args
 	val = eval_(val, scope)
-	scope_def(scope, name, val)
+	scope.declare(name, val)
 	return val
 
 @add_builtin_function
@@ -249,4 +246,3 @@ assert exec_('(div 3 4)') == '0.75'
 assert exec_('(mod 3 4)') == '3.0'
 assert exec_('((lambda (x) (strcat abc $x)) def)') == 'abcdef'
 assert exec_('(quote x)') == 'x'
-
