@@ -237,4 +237,3 @@ assert exec_('(mul 3 4)') == '12.0'
 assert exec_('(div 3 4)') == '0.75'
 assert exec_('(mod 3 4)') == '3.0'
 assert exec_('((lambda (x) (strcat abc $x)) def)') == 'abcdef'
-
