@@ -1,6 +1,6 @@
-"""
+"""BeeEye is not VI.
 
-4 object types
+4 basic object types
 
 	str
 	list
@@ -11,9 +11,14 @@ Only str and list are used in the ast.
 
 """
 
+import sys
+
 BUILTINS = dict()
 
 PRELUDE = """
+
+(def # $len)
+
 """
 
 def wrap_function(f):
@@ -46,7 +51,7 @@ def scope_lookup(scope, key):
 		raise KeyError(key)
 	return scope_lookup(parent, key)
 
-def scope_def(scope, key, val):
+def scope_declare(scope, key, val):
 	table, parent = scope
 	if key in table:
 		raise ValueError(key + ' already declared')
@@ -121,6 +126,9 @@ def parse_one(s, pi=None):
 		pi[0] = i
 		return ['quote', eval(s[j:i])]
 
+	elif s.startswith(')'):
+		raise SyntaxError('unexpected ")"')
+
 	else:
 		j = i
 		while s[i:i+1] not in ('', '"', "'", '(', ')') and not s[i:i+1].isspace():
@@ -194,6 +202,7 @@ def be_print(*args):
 	last = ''
 	if args:
 		sys.stdout.write(str(args[0]))
+		last = args[0]
 		for arg in args[1:]:
 			sys.stdout.write(' ')
 			sys.stdout.write(str(arg))
@@ -215,7 +224,7 @@ def be_lambda(args, scope):
 	def lambda_(*args):
 		body_scope = new_local_scope(scope)
 		for name, arg in zip(arg_names, args):
-			scope_def(body_scope, name, arg)
+			scope_declare(body_scope, name, arg)
 		return eval_all(body, body_scope)
 
 	return lambda_
@@ -224,7 +233,14 @@ def be_lambda(args, scope):
 def be_def(args, scope):
 	name, val = args
 	val = eval_(val, scope)
-	scope_def(scope, name, val)
+	scope_declare(scope, name, val)
+	return val
+
+@add_builtin_macro
+def be_let(args, scope):
+	name, val = args
+	val = eval_(val, scope)
+	scope_assign(scope, name, val)
 	return val
 
 @add_builtin_function
@@ -235,7 +251,36 @@ def be_id(x):
 def be_eq(a, b):
 	return a == b
 
-assert parse('print') == ['print']
+@add_builtin_function
+def be_eval(d, scope):
+	return eval_(d, scope)
+
+@add_builtin_macro
+def be_macro(args, scope):
+	(args_name, scope_name), = args[:1]
+	body = args[1:]
+
+	def macro(macro_args, macro_scope):
+		exec_scope = new_local_scope(scope)
+		scope_declare(exec_scope, args_name, macro_args)
+		scope_declare(exec_scope, scope_name, macro_scope)
+		return eval_all(body, exec_scope)
+
+	return macro
+
+@add_builtin_function
+def be_len(x):
+	return str(len(x))
+
+@add_builtin_function
+def be_list(*args):
+	return list(args)
+
+@add_builtin_function
+def be_dict(*args):
+	return dict(zip(args[::2], args[1::2]))
+
+assert parse('print') == ['print'] 
 assert parse('(print 12)') == [['print', '12']]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
 assert exec_('') == ''
@@ -249,4 +294,12 @@ assert exec_('(div 3 4)') == '0.75'
 assert exec_('(mod 3 4)') == '3.0'
 assert exec_('((lambda (x) (strcat abc $x)) def)') == 'abcdef'
 assert exec_('(quote x)') == 'x'
-
+assert exec_('(len abc567)') == '6'
+assert exec_('(list 1 2 3)') == ['1', '2', '3']
+assert exec_('(len (list 1 2 3))') == '3'
+assert exec_('(dict 1 2 3 4)') == {'1': '2', '3': '4'}
+assert exec_('(len (dict 1 2 3 4))') == '2'
+exec_("""
+(print (len abc567))
+(print (# (list 1 2 3)))
+""")
