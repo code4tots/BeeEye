@@ -3,7 +3,7 @@
 5 basic object types
 
 	str
-	num
+	num (float)
 	list
 	dict
 	macro
@@ -18,42 +18,6 @@ import sys
 BUILTINS = dict()
 
 PRELUDES = ["""
-(def # len)
-(def == eq)
-(def < lt)
-(def + add)
-(def - subtract)
-(def * mul)
-(def / divide)
-(def % modulo)
-
-(def [] getitem)
-(def []= setitem)
-
-(def comment (macro (args scope)))
-
-(comment lexicographic ordering of list and str)
-(def lex-lt lex_lt)
-
-(def > (lambda (a b)
-	(not (or (== a b) (< a b)))
-))
-
-(def >= (lambda (a b)
-	(not (< a b))
-))
-
-(def 99-bottles-of-beer (lambda ()
-
-	(def i 99)
-
-	(while (< i 0)
-		(print (floor i) bottles of beer on the wall)
-		(let i (- i 1))
-	)
-
-))
-
 """]
 
 def wrap_function(f):
@@ -73,7 +37,7 @@ def add_builtin_function(builtin):
 	return add_builtin_macro(wrap_function(builtin))
 
 def new_global_scope():
-	return [dict(BUILTINS), '']
+	return [dict(BUILTINS), 0.0]
 
 def new_local_scope(parent):
 	return [dict(), parent]
@@ -82,7 +46,7 @@ def scope_lookup(scope, key):
 	table, parent = scope
 	if key in table:
 		return table[key]
-	if parent == '':
+	if parent == 0.0:
 		raise KeyError(key)
 	return scope_lookup(parent, key)
 
@@ -97,7 +61,7 @@ def scope_assign(scope, key, val):
 	if key in table:
 		table[key] = val
 		return val
-	if parent == '':
+	if parent == 0.0:
 		raise KeyError(key)
 	return scope_assign(parent, key, val)
 
@@ -180,7 +144,7 @@ def parse_name(s, pi=None):
 def eval_(d, scope):
 	if isinstance(d, str):
 		if all(c.isdigit() or c in '.' for c in d):
-			return d
+			return float((float if '.' in d else int)(d))
 		else:
 			return scope_lookup(scope, d)
 
@@ -191,7 +155,7 @@ def eval_(d, scope):
 		raise ValueError("Can't eval object of type %s" % type(d))
 
 def eval_all(dd, scope):
-	last = ''
+	last = 0.0
 	for d in dd:
 		last = eval_(d, scope)
 	return last
@@ -205,36 +169,33 @@ def exec_(string, scope=None):
 		run(prelude, scope)
 	return run(string, scope)
 
-def Int(i):
-	return int(float(i))
-
 @add_builtin_function
 def be_strcat(*args):
 	return ''.join(args)
 
 @add_builtin_function
 def be_floor(x):
-	return str(int(float(x)))
+	return float(int(x))
 
 @add_builtin_function
 def be_mul(a, b):
-	return str(float(a) * float(b))
+  return a * b
 
 @add_builtin_function
 def be_divide(a, b):
-	return str(float(a) / float(b))
+	return a / b
 
 @add_builtin_function
 def be_modulo(a, b):
-	return str(float(a) % float(b))
+	return a % b
 
 @add_builtin_function
 def be_add(a, b):
-	return str(float(a) + float(b))
+	return a + b
 
 @add_builtin_function
 def be_subtract(a, b):
-	return str(float(a) - float(b))
+	return a - b
 
 @add_builtin_function
 def be_print(*args):
@@ -318,7 +279,7 @@ def be_macro(args, scope):
 
 @add_builtin_function
 def be_len(x):
-	return str(len(x))
+	return len(x)
 
 @add_builtin_function
 def be_list(*args):
@@ -330,7 +291,7 @@ def be_dict(*args):
 
 @add_builtin_function
 def be_lt(a, b):
-	return '1' if float(a) < float(b) else ''
+	return 1.0 if float(a) < float(b) else 0.0
 
 @add_builtin_macro
 def be_while(args, scope):
@@ -371,19 +332,19 @@ def be_lex_lt(a, b):
 assert parse('print') == ['print']
 assert parse('(print 12)') == [['print', '12']]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
-assert exec_('') == ''
+assert exec_('') == 0.0
 assert exec_('"abc"') == 'abc'
-assert exec_('(add 1 2)') == '3.0'
-assert exec_('(strcat 1 2)') == '12'
-assert exec_('(floor (add .5 0.5))') == '1'
-assert exec_('(subtract 1 2)') == '-1.0'
-assert exec_('(mul 3 4)') == '12.0'
-assert exec_('(divide 3 4)') == '0.75'
-assert exec_('(modulo 3 4)') == '3.0'
+assert exec_('(add 1 2)') == 3.0
+assert exec_('(strcat "1" "2")') == '12'
+assert exec_('(floor (add .5 0.5))') == 1.0
+assert exec_('(subtract 1 2)') == -1.0
+assert exec_('(mul 3 4)') == 12.0
+assert exec_('(divide 3 4)') == 0.75
+assert exec_('(modulo 3 4)') == 3.0
 assert exec_('((lambda (x) (strcat "abc" x)) "def")') == 'abcdef'
 assert exec_('(quote x)') == 'x'
-assert exec_('(len "abc567")') == '6'
-assert exec_('(list 1 2 3)') == ['1', '2', '3']
-assert exec_('(len (list 1 2 3))') == '3'
-assert exec_('(dict 1 2 3 4)') == {'1': '2', '3': '4'}
-assert exec_('(len (dict 1 2 3 4))') == '2'
+assert exec_('(len "abc567")') == 6.0
+assert exec_('(list 1 2 3)') == [1.0, 2.0, 3.0]
+assert exec_('(len (list 1 2 3))') == 3.0
+assert exec_('(dict 1 2 3 4)') == {1.0: 2.0, 3.0: 4.0}
+assert exec_('(len (dict 1 2 3 4))') == 2.0
