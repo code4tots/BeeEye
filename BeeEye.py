@@ -1,11 +1,12 @@
 """BeeEye is not VI.
 
-4 basic object types
+5 basic object types
 
 	str
 	list
 	dict
 	macro
+	blob (opaque objects)
 
 Only str and list are used in the ast.
 
@@ -18,6 +19,28 @@ BUILTINS = dict()
 PRELUDE = """
 
 (def # $len)
+(def == $eq)
+(def < $lt)
+(def + $add)
+(def - $sub)
+(def * $mul)
+(def / $div)
+(def % $mod)
+
+(def > (lambda (a b)
+	(not (or (== $a $b) (< $a $b)))
+))
+
+(def 99-bottles-of-beer (lambda ()
+
+	(def i 99)
+
+	(while (> $i 0)
+		(print (floor $i) bottles of beer on the wall)
+		(let i (- $i 1))
+	)
+
+))
 
 """
 
@@ -126,16 +149,21 @@ def parse_one(s, pi=None):
 		pi[0] = i
 		return ['quote', eval(s[j:i])]
 
-	elif s.startswith(')'):
+	elif s[i:i+1] == ')':
 		raise SyntaxError('unexpected ")"')
 
 	else:
-		j = i
-		while s[i:i+1] not in ('', '"', "'", '(', ')') and not s[i:i+1].isspace():
-			i += 1
+		return parse_name(s, pi)
 
-		pi[0] = i
-		return s[j:i]
+def parse_name(s, pi=None):
+	pi = pi or [0]
+	i = pi[0]
+	j = i
+	while s[i:i+1] not in ('', '"', "'", '(', ')') and not s[i:i+1].isspace():
+		i += 1
+
+	pi[0] = i
+	return s[j:i]
 
 def eval_(d, scope):
 	if isinstance(d, str):
@@ -168,6 +196,9 @@ def exec_(string, scope=None):
 	scope = scope or new_global_scope()
 	run(PRELUDE, scope)
 	return run(string, scope)
+
+def Int(i):
+	return int(float(i))
 
 @add_builtin_function
 def be_strcat(*args):
@@ -245,11 +276,11 @@ def be_let(args, scope):
 
 @add_builtin_function
 def be_id(x):
-	return id(x)
+	return str(id(x))
 
 @add_builtin_function
 def be_eq(a, b):
-	return a == b
+	return '1' if a == b else ''
 
 @add_builtin_function
 def be_eval(d, scope):
@@ -280,14 +311,37 @@ def be_list(*args):
 def be_dict(*args):
 	return dict(zip(args[::2], args[1::2]))
 
-assert parse('print') == ['print'] 
+@add_builtin_function
+def be_lt(a, b):
+	return '1' if float(a) < float(b) else ''
+
+@add_builtin_macro
+def be_while(args, scope):
+	cond = args[0]
+	body = args[1:]
+	last = ''
+	while eval_(cond, scope):
+		last = eval_all(body, scope)
+	return last
+
+@add_builtin_function
+def be_not(x):
+	return '' if x else '1'
+
+@add_builtin_macro
+def be_or(args, scope):
+	a, b = args
+	a = eval_(a, scope)
+	return a if a else eval_(b, scope)
+
+assert parse('print') == ['print']
 assert parse('(print 12)') == [['print', '12']]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
 assert exec_('') == ''
 assert exec_('abc') == 'abc'
 assert exec_('(add 1 2)') == '3.0'
 assert exec_('(strcat 1 2)') == '12'
-assert exec_('(floor (add .5 .5))') == '1'
+assert exec_('(floor (add .5 0.5))') == '1'
 assert exec_('(sub 1 2)') == '-1.0'
 assert exec_('(mul 3 4)') == '12.0'
 assert exec_('(div 3 4)') == '0.75'
@@ -299,7 +353,3 @@ assert exec_('(list 1 2 3)') == ['1', '2', '3']
 assert exec_('(len (list 1 2 3))') == '3'
 assert exec_('(dict 1 2 3 4)') == {'1': '2', '3': '4'}
 assert exec_('(len (dict 1 2 3 4))') == '2'
-exec_("""
-(print (len abc567))
-(print (# (list 1 2 3)))
-""")
