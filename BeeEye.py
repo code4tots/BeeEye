@@ -3,6 +3,7 @@
 5 basic object types
 
 	str
+	num
 	list
 	dict
 	macro
@@ -16,33 +17,44 @@ import sys
 
 BUILTINS = dict()
 
-PRELUDE = """
+PRELUDES = ["""
+(def # len)
+(def == eq)
+(def < lt)
+(def + add)
+(def - subtract)
+(def * mul)
+(def / divide)
+(def % modulo)
 
-(def # $len)
-(def == $eq)
-(def < $lt)
-(def + $add)
-(def - $sub)
-(def * $mul)
-(def / $div)
-(def % $mod)
+(def [] getitem)
+(def []= setitem)
+
+(def comment (macro (args scope)))
+
+(comment lexicographic ordering of list and str)
+(def lex-lt lex_lt)
 
 (def > (lambda (a b)
-	(not (or (== $a $b) (< $a $b)))
+	(not (or (== a b) (< a b)))
+))
+
+(def >= (lambda (a b)
+	(not (< a b))
 ))
 
 (def 99-bottles-of-beer (lambda ()
 
 	(def i 99)
 
-	(while (> $i 0)
-		(print (floor $i) bottles of beer on the wall)
-		(let i (- $i 1))
+	(while (< i 0)
+		(print (floor i) bottles of beer on the wall)
+		(let i (- i 1))
 	)
 
 ))
 
-"""
+"""]
 
 def wrap_function(f):
 	def builtin_function(args, scope):
@@ -167,18 +179,13 @@ def parse_name(s, pi=None):
 
 def eval_(d, scope):
 	if isinstance(d, str):
-		if d.startswith('$'):
-			return scope_lookup(scope, d[1:])
-		else:
+		if all(c.isdigit() or c in '.' for c in d):
 			return d
+		else:
+			return scope_lookup(scope, d)
 
 	elif isinstance(d, list):
-		f = eval_(d[0], scope)
-
-		if isinstance(f, str):
-			f = scope_lookup(scope, f)
-
-		return f(d[1:], scope)
+		return eval_(d[0], scope)(d[1:], scope)
 
 	else:
 		raise ValueError("Can't eval object of type %s" % type(d))
@@ -194,7 +201,8 @@ def run(string, scope):
 
 def exec_(string, scope=None):
 	scope = scope or new_global_scope()
-	run(PRELUDE, scope)
+	for prelude in PRELUDES:
+		run(prelude, scope)
 	return run(string, scope)
 
 def Int(i):
@@ -213,11 +221,11 @@ def be_mul(a, b):
 	return str(float(a) * float(b))
 
 @add_builtin_function
-def be_div(a, b):
+def be_divide(a, b):
 	return str(float(a) / float(b))
 
 @add_builtin_function
-def be_mod(a, b):
+def be_modulo(a, b):
 	return str(float(a) % float(b))
 
 @add_builtin_function
@@ -225,7 +233,7 @@ def be_add(a, b):
 	return str(float(a) + float(b))
 
 @add_builtin_function
-def be_sub(a, b):
+def be_subtract(a, b):
 	return str(float(a) - float(b))
 
 @add_builtin_function
@@ -273,6 +281,15 @@ def be_let(args, scope):
 	val = eval_(val, scope)
 	scope_assign(scope, name, val)
 	return val
+
+@add_builtin_macro
+def be_if(args, scope):
+	if len(args) == 3:
+		cond, a, b = args
+	else:
+		cond, a = args
+		b = ''
+	return eval_((a if eval_(cond, scope) else b), scope)
 
 @add_builtin_function
 def be_id(x):
@@ -334,21 +351,38 @@ def be_or(args, scope):
 	a = eval_(a, scope)
 	return a if a else eval_(b, scope)
 
+@add_builtin_macro
+def be_block(args, scope):
+	return eval_all(args, new_local_scope(scope))
+
+@add_builtin_function
+def be_getitem(x, i):
+	return x[Int(i) if isinstance(x, (str, list)) else i]
+
+@add_builtin_function
+def be_setitem(x, i, v):
+	x[Int(i) if isinstance(x, (str, list)) else i] = v
+	return v
+
+@add_builtin_function
+def be_lex_lt(a, b):
+	return a < b
+
 assert parse('print') == ['print']
 assert parse('(print 12)') == [['print', '12']]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
 assert exec_('') == ''
-assert exec_('abc') == 'abc'
+assert exec_('"abc"') == 'abc'
 assert exec_('(add 1 2)') == '3.0'
 assert exec_('(strcat 1 2)') == '12'
 assert exec_('(floor (add .5 0.5))') == '1'
-assert exec_('(sub 1 2)') == '-1.0'
+assert exec_('(subtract 1 2)') == '-1.0'
 assert exec_('(mul 3 4)') == '12.0'
-assert exec_('(div 3 4)') == '0.75'
-assert exec_('(mod 3 4)') == '3.0'
-assert exec_('((lambda (x) (strcat abc $x)) def)') == 'abcdef'
+assert exec_('(divide 3 4)') == '0.75'
+assert exec_('(modulo 3 4)') == '3.0'
+assert exec_('((lambda (x) (strcat "abc" x)) "def")') == 'abcdef'
 assert exec_('(quote x)') == 'x'
-assert exec_('(len abc567)') == '6'
+assert exec_('(len "abc567")') == '6'
 assert exec_('(list 1 2 3)') == ['1', '2', '3']
 assert exec_('(len (list 1 2 3))') == '3'
 assert exec_('(dict 1 2 3 4)') == {'1': '2', '3': '4'}

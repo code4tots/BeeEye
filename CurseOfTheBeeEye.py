@@ -1,8 +1,22 @@
 import curses
 
-from BeeEye import add_builtin_function, add_builtin_macro, exec_, eval_, eval_all, Int
+from BeeEye import add_builtin_function, add_builtin_macro, exec_, eval_, eval_all, Int, PRELUDES
 
 STDSCR = None
+
+PRELUDES.append("""
+
+(def get-dim getdim)
+
+(def get-width (lambda ()
+	(getitem (get-dim) 0)
+))
+
+(def get-height (lambda ()
+	(getitem (get-dim) 1)
+))
+
+""")
 
 @add_builtin_function
 def be_getdim():
@@ -18,29 +32,18 @@ def be_putch(x, y, ch):
 def be_getkey():
 	return STDSCR.getkey()
 
+@add_builtin_function
+def be_clear():
+	STDSCR.clear()
+	return ''
+
 def main(stdscr):
 	global STDSCR
 	STDSCR = stdscr
 	curses.curs_set(0)
 
-	exec_("""
-
-(def i 0)
-(while (< $i 10)
-	(putch (* 3 $i) $i x)
-	(let i (+ $i 1))
-)
-
-(putch 20 20 (getkey))
-
-(getkey)
-
-(def x 0)
-(def y 0)
-
-
-""")
-
+	with open('sample.cbe') as f:
+		exec_(f.read())
 
 if __name__ == '__main__':
 	curses.wrapper(main)
