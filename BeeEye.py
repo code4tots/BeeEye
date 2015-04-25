@@ -8,8 +8,10 @@
 
 """
 
+GLOBALS = []
+
 def new_global_scope():
-	return [[], '']
+	return [[[k, v] for k, v in GLOBALS], '']
 
 def new_local_scope(parent):
 	return [[], parent]
@@ -117,11 +119,131 @@ def parse_name(s, pi=None):
 		i += 1
 
 	pi[0] = i
-	return s[j:i]
+	t = s[j:i]
+
+	if all(c.isdigit() or c in '.' for c in t):
+		return ['quote', t]
+	else:
+		return s[j:i]
 
 def eval_(d, scope):
-	pass
+	if isinstance(d, str):
+		result = scope_lookup(scope, d)
+	elif isinstance(d, list):
+		result = eval_(d[0], scope)(d[1:], scope)
+	else:
+		raise ValueError((type(d), d))
+
+	if isinstance(result, (str, list)) or callable(result):
+		return result
+	elif isinstance(result, bool):
+		return '1' if result else ''
+	elif isinstance(result, (int, float)):
+		return str(result)
+	elif isinstance(result, tuple):
+		return list(result)
+	else:
+		raise ValueError((type(result), result))
+
+def eval_all(dd, scope):
+	last = ''
+	for d in dd:
+		last = eval_(d, scope)
+	return last
+
+def run(string, scope):
+	return eval_all(parse(string), scope)
+
+def wrap_function(f):
+	def builtin_function(args, scope):
+		return f(*[eval_(arg, scope) for arg in args])
+	builtin_function.__name__ = f.__name__
+	return builtin_function
+
+def builtin_quote(args, scope):
+	q, = args
+	return q
+GLOBALS.append(['quote', builtin_quote])
+
+@wrap_function
+def builtin_print(*args):
+	last = ''
+	if args:
+		sys.stdout.write(str(args[0]))
+		last = args[0]
+		for arg in args[1:]:
+			sys.stdout.write(' ')
+			sys.stdout.write(str(arg))
+			last = arg
+	sys.stdout.write('\n')
+	return last
+GLOBALS.append(['print', builtin_print])
+
+@wrap_function
+def builtin_strcat(*args):
+	return ''.join(args)
+GLOBALS.append(['strcat', builtin_strcat])
+
+@wrap_function
+def builtin_add(a, b):
+	return float(a) + float(b)
+GLOBALS.append(['add', builtin_add])
+
+@wrap_function
+def builtin_subtract(a, b):
+	return float(a) - float(b)
+GLOBALS.append(['subtract', builtin_subtract])
+
+@wrap_function
+def builtin_multiply(a, b):
+	return float(a) * float(b)
+GLOBALS.append(['multiply', builtin_multiply])
+
+@wrap_function
+def builtin_divide(a, b):
+	return float(a) / float(b)
+GLOBALS.append(['divide', builtin_divide])
+
+@wrap_function
+def builtin_modulo(a, b):
+	return float(a) % float(b)
+GLOBALS.append(['modulo', builtin_modulo])
+
+@wrap_function
+def builtin_length(xs):
+	return len(xs)
+GLOBALS.append(['length', builtin_length])
+
+@wrap_function
+def builtin_getitem(xs, i):
+	return xs[int(float(i))]
+GLOBALS.append(['getitem', builtin_getitem])
+
+@wrap_function
+def builtin_setitem(xs, i, x):
+	xs[int(float(i))] = x
+	return x
+GLOBALS.append(['setitem', builtin_setitem])
+
+@wrap_function
+def builtin_list(*args):
+	return args
+GLOBALS.append(['list', builtin_list])
 
 assert parse('print') == ['print']
-assert parse('(print 12)') == [['print', '12']]
+assert parse('(print 12)') == [['print', ['quote', '12']]]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
+
+scope = new_global_scope()
+
+assert run('(quote x)', scope) == 'x'
+assert run('(strcat "a" "b")', scope) == 'ab'
+assert run('(add 1 2)', scope) == '3.0'
+assert run('(subtract 1 2.0)', scope) == '-1.0'
+assert run('(multiply 1.5 2)', scope) == '3.0'
+assert run('(divide 5 4)', scope) == '1.25'
+assert run('(modulo 7.2 4)', scope) == '3.2'
+assert run('(length 1234)', scope) == '4'
+assert run('(getitem 1234 1)', scope) == '2'
+assert run('(getitem (list 4 3 2 1) 1)', scope) == '3'
+assert run('(list 1 2 3)', scope) == ['1', '2', '3']
