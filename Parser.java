@@ -1,15 +1,7 @@
-/*
-
-Uses java types
-
-	String
-	ArrayList
-
-*/
-
 import java.util.ArrayList;
 
-/** S-expression parser */
+/** S-expression parser. The parsed result is a mixture of
+	Integer, Double, String and ArrayList. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class Parser {
 
@@ -107,7 +99,14 @@ public class Parser {
 					ch() != '"' && ch() != '\'' &&
 					!Character.isWhitespace(ch()))
 				i++;
-			ret = s.substring(j, i);
+			String t = s.substring(j, i);
+			if (t.matches("[0-9]+"))
+				ret = Integer.parseInt(t);
+			else if (t.matches("[0-9]*\\.[0-9]+") || t.matches("[0-9]+\\."))
+				ret = Double.parseDouble(t);
+			else {
+				ret = t;
+			}
 			break;
 		}
 		return ret;
