@@ -71,6 +71,9 @@ public class BeeEye {
 		if (x instanceof Boolean) {
 			return (Boolean) x;
 		}
+		if (x instanceof Number) {
+			return ((Number) x).doubleValue() != 0;
+		}
 		if (x instanceof Collection) {
 			return ((Collection) x).size() > 0;
 		}

@@ -1,12 +1,12 @@
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class BasicBuiltins {
 
 	public static void main(String[] args) {
 		install();
-		BeeEye.run("(print 'hi' 'there' 3 4.1)");
 	}
 
 	private static boolean installed = false;
@@ -16,13 +16,8 @@ public class BasicBuiltins {
 			return false;
 
 		McCarthyBuiltins.install();
-
-		BeeEye.GLOBAL_SCOPE.put("equals", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
-				return BeeEye.eval(args.get(0), scope).equals(
-						BeeEye.eval(args.get(1), scope));
-			}
-		});
+		ArithmeticBuiltins.install();
+		LogicalBuiltins.install();
 
 		BeeEye.GLOBAL_SCOPE.put("strcat", new Macro() {
 			public Object call(List args, Map<String, Object> scope) {
@@ -47,8 +42,14 @@ public class BasicBuiltins {
 			}
 		});
 
-		BeeEye.GLOBAL_SCOPE.put("true", true);
-		BeeEye.GLOBAL_SCOPE.put("false", false);
+		BeeEye.GLOBAL_SCOPE.put("list", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				List values = new ArrayList();
+				for (Object arg : args)
+					values.add(BeeEye.eval(arg, scope));
+				return values;
+			}
+		});
 
 		return installed = true;
 	}

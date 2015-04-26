@@ -4,8 +4,8 @@ import java.util.Map;
 public class ArithmeticBuiltins {
 
 	public static void main(String[] args) {
-		install();
 		BasicBuiltins.install();
+		BeeEye.run("(print 'hi' 'there' 3 4.1)");
 		BeeEye.run("(print '(+ 2 3) ='(+ 2 3))");
 		BeeEye.run("(print '(- 2 3) ='(- 2 3))");
 		BeeEye.run("(print '(* 2 3) ='(* 2 3))");
@@ -14,6 +14,11 @@ public class ArithmeticBuiltins {
 		BeeEye.run("(print '(% 2.3 1) =' (% 2.3 1))");
 		BeeEye.run("(print '(% 2 1.2) =' (% 2 1.2))");
 		BeeEye.run("(print '(% 2.1 1.2) =' (% 2.1 1.2))");
+		BeeEye.run("(print '(< 2.1 1.2) =' (< 2.1 1.2))");
+		BeeEye.run("(print '(< hey there) =' (< 'hey' 'there'))");
+		BeeEye.run("(print '(>= hey there) =' (>= 'hey' 'there'))");
+		BeeEye.run("(print '(>= 2 3) =' (>= 2 3))");
+		BeeEye.run("(print '(<= 2 3) =' (<= 2 3))");
 	}
 
 	private static boolean installed = false;
@@ -21,6 +26,9 @@ public class ArithmeticBuiltins {
 	public static boolean install() {
 		if (installed)
 			return false;
+
+		McCarthyBuiltins.install();
+		LogicalBuiltins.install();
 
 		BeeEye.GLOBAL_SCOPE.put("+", new Macro() {
 			public Object call(List args, Map<String, Object> scope) {
@@ -169,12 +177,26 @@ public class ArithmeticBuiltins {
 				}
 				if (a instanceof String) {
 					if (b instanceof String) {
-						return ((String) a) < ((String) b);
+						return ((String) a).compareTo((String) b) < 0;
 					}
 				}
 				throw new Error(a.getClass().toString() + " " + b.getClass().toString());
 			}
 		});
+
+		BeeEye.run("(label == equals)", BeeEye.GLOBAL_SCOPE);
+
+		BeeEye.run(
+			"(label >= (lambda (a b) (not (< a b))))",
+			BeeEye.GLOBAL_SCOPE);
+
+		BeeEye.run(
+			"(label <= (lambda (a b) (or (equals a b) (< a b))))",
+			BeeEye.GLOBAL_SCOPE);
+
+		BeeEye.run(
+			"(label > (lambda (a b) (not (<= a b)))",
+			BeeEye.GLOBAL_SCOPE);
 
 		return installed = true;
 	}
