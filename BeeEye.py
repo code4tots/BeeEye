@@ -230,6 +230,38 @@ def builtin_list(*args):
 	return args
 GLOBALS.append(['list', builtin_list])
 
+def builtin_def(args, scope):
+	name, val_ast = args
+	val = eval_(val_ast, scope)
+	return scope_declare(name, val)
+GLOBALS.append(['def', builtin_def])
+
+def builtin_let(args, scope):
+	name, val_ast = args
+	val = eval_(val_ast, scope)
+	return scope_assign(name, val)
+GLOBALS.append(['let', builtin_let])
+
+@wrap_function
+def builtin_lexicographically_ordered(*args):
+	return all(a < b for a, b in zip(args[:-1], args[1:]))
+GLOBALS.append(['lexicographically-ordered', builtin_lexicographically_ordered])
+
+def builtin_lambda(args, scope):
+	arg_names = args[0]
+	body = args[1:]
+
+	@wrap_function
+	def lambda_(*vals):
+		exec_scope = new_local_scope(scope)
+		for name, val in zip(arg_names, vals):
+			scope_declare(exec_scope, name, val)
+		scope_declare(exec_scope, '__args__', list(vals))
+		return eval_all(body, exec_scope)
+
+	return lambda_
+GLOBALS.append(['lambda', builtin_lambda])
+
 assert parse('print') == ['print']
 assert parse('(print 12)') == [['print', ['quote', '12']]]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
@@ -247,3 +279,10 @@ assert run('(length 1234)', scope) == '4'
 assert run('(getitem 1234 1)', scope) == '2'
 assert run('(getitem (list 4 3 2 1) 1)', scope) == '3'
 assert run('(list 1 2 3)', scope) == ['1', '2', '3']
+assert run('(lexicographically-ordered 10 200 3)', scope) == '1'
+assert run('(lexicographically-ordered 3 20)', scope) == ''
+assert run('((lambda (x) (strcat x "def")) "abc")', scope) == 'abcdef'
+
+PRELUDE = """
+
+"""
