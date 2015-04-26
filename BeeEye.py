@@ -8,43 +8,6 @@
 
 """
 
-GLOBALS = []
-
-def new_global_scope():
-	return [[[k, v] for k, v in GLOBALS], '']
-
-def new_local_scope(parent):
-	return [[], parent]
-
-def scope_lookup(scope, key):
-	table, parent = scope
-	for k, v in table:
-		if key == k:
-			return v
-	if parent == '':
-		raise KeyError(key)
-	return scope_lookup(parent, key)
-
-def scope_declare(scope, key, val):
-	table, parent = scope
-	for k, v in table:
-		if key == k:
-			raise ValueError(key + ' already declared')
-	table.append([key, val])
-	return val
-
-def scope_assign(scope, key, val):
-	table, parent = scope
-	for k, v in table:
-		if key == k:
-			entry = [k, v]
-			break
-	else:
-		if parent == 0.0:
-			raise KeyError(key)
-		return scope_assign(parent, key, val)
-	table.remove(entry)
-
 def parse(s, pi=None):
 	pi = pi or [0]
 	x = []
@@ -125,6 +88,43 @@ def parse_name(s, pi=None):
 		return ['quote', t]
 	else:
 		return s[j:i]
+
+GLOBALS = []
+
+def new_global_scope():
+	return [[[k, v] for k, v in GLOBALS], '']
+
+def new_local_scope(parent):
+	return [[], parent]
+
+def scope_lookup(scope, key):
+	table, parent = scope
+	for k, v in table:
+		if key == k:
+			return v
+	if parent == '':
+		raise KeyError(key)
+	return scope_lookup(parent, key)
+
+def scope_declare(scope, key, val):
+	table, parent = scope
+	for k, v in table:
+		if key == k:
+			raise ValueError(key + ' already declared')
+	table.append([key, val])
+	return val
+
+def scope_assign(scope, key, val):
+	table, parent = scope
+	for k, v in table:
+		if key == k:
+			entry = [k, v]
+			break
+	else:
+		if parent == 0.0:
+			raise KeyError(key)
+		return scope_assign(parent, key, val)
+	table.remove(entry)
 
 def eval_(d, scope):
 	if isinstance(d, str):
@@ -262,6 +262,11 @@ def builtin_lambda(args, scope):
 	return lambda_
 GLOBALS.append(['lambda', builtin_lambda])
 
+def builtin_if(args, scope):
+	cond, a, b = args
+	return eval_(a if eval_(cond, scope) else b, scope)
+GLOBALS.append(['if', builtin_if])
+
 assert parse('print') == ['print']
 assert parse('(print 12)') == [['print', ['quote', '12']]]
 assert parse('(print ("12"))') == [['print', [['quote', '12']]]]
@@ -282,6 +287,8 @@ assert run('(list 1 2 3)', scope) == ['1', '2', '3']
 assert run('(lexicographically-ordered 10 200 3)', scope) == '1'
 assert run('(lexicographically-ordered 3 20)', scope) == ''
 assert run('((lambda (x) (strcat x "def")) "abc")', scope) == 'abcdef'
+assert run('(if "" 1 2)', scope) == '2'
+assert run('(if "1" 1 2)', scope) == '1'
 
 PRELUDE = """
 
