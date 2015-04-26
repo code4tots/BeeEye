@@ -19,15 +19,7 @@ public class BasicBuiltins {
 		ArithmeticBuiltins.install();
 		LogicalBuiltins.install();
 		CollectionBuiltins.install();
-
-		BeeEye.GLOBAL_SCOPE.put("strcat", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
-				StringBuilder sb = new StringBuilder();
-				for (Object arg : args)
-					sb.append((String) BeeEye.eval(arg, scope));
-				return sb.toString();
-			}
-		});
+		StringBuiltins.install();
 
 		BeeEye.GLOBAL_SCOPE.put("print", new Macro() {
 			public Object call(List args, Map<String, Object> scope) {

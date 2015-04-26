@@ -1,6 +1,7 @@
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.HashMap;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class CollectionBuiltins {
@@ -12,6 +13,7 @@ public class CollectionBuiltins {
 			"(label ll (list 1 2 3))" +
 			"(setitem ll 1 3)" +
 			"(print ll)");
+		BeeEye.run("(print (dict 1 2 3 4))");
 	}
 
 	private static boolean installed = false;
@@ -26,6 +28,18 @@ public class CollectionBuiltins {
 				for (Object arg : args)
 					values.add(BeeEye.eval(arg, scope));
 				return values;
+			}
+		});
+
+		BeeEye.GLOBAL_SCOPE.put("dict", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				Map map = new HashMap();
+				for (int i = 0; i < args.size(); i += 2) {
+					map.put(
+						BeeEye.eval(args.get(i), scope),
+						BeeEye.eval(args.get(i+1), scope));
+				}
+				return map;
 			}
 		});
 

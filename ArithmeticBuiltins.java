@@ -1,6 +1,8 @@
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 
+@SuppressWarnings({"unchecked", "rawtypes"})
 public class ArithmeticBuiltins {
 
 	public static void main(String[] args) {
@@ -53,6 +55,13 @@ public class ArithmeticBuiltins {
 				if (a instanceof String) {
 					if (b instanceof String) {
 						return ((String) a) + ((String) b);
+					}
+				}
+				if (a instanceof List) {
+					if (b instanceof List) {
+						ArrayList c = new ArrayList((List) a);
+						c.addAll((List) b);
+						return c;
 					}
 				}
 				throw new Error(a.getClass().toString() + " " + b.getClass().toString());
