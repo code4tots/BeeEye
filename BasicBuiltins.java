@@ -18,6 +18,7 @@ public class BasicBuiltins {
 		McCarthyBuiltins.install();
 		ArithmeticBuiltins.install();
 		LogicalBuiltins.install();
+		CollectionBuiltins.install();
 
 		BeeEye.GLOBAL_SCOPE.put("strcat", new Macro() {
 			public Object call(List args, Map<String, Object> scope) {
@@ -39,15 +40,6 @@ public class BasicBuiltins {
 				}
 				System.out.println();
 				return args.get(args.size() - 1);
-			}
-		});
-
-		BeeEye.GLOBAL_SCOPE.put("list", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
-				List values = new ArrayList();
-				for (Object arg : args)
-					values.add(BeeEye.eval(arg, scope));
-				return values;
 			}
 		});
 
