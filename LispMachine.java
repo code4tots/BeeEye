@@ -1,56 +1,42 @@
+
+/**
+ * Base LispMachine.
+ * Subclasses should override getAxioms.
+ */
 public class LispMachine {
 
 	public static void main(String[] args) {
 		System.out.println(parse("(1 2 3) 4 5. 6 'hello' there"));
-		System.out.println(eval(parse("hello"), new Axiom[0]));
 	}
 
-
-
-	//// Everything static beyond this point.
-
-	/// axiom.
-
-	abstract public static class Axiom {
-		abstract public String getName();
-		abstract public Thing call(Cons data, Cons args);
+	public Axiom[] getAxioms() {
+		return new Axiom[0];
 	}
 
-	/// eval.
+	public Thing evalAxiom(Thing f, Cons args) {
 
-	private static Thing evalAxiom(Thing f, Cons args, Axiom[] axioms) {
 		if (f instanceof Atom) {
 			return evalAxiom(list(f), args, axioms);
 		}
-		else if (f instanceof Cons) {
-			String name = f.car().str();
-			for (Axiom axiom : axioms)
-				if (name.equals(axiom.getName()))
-					return axiom.call(f.cdr(), args);
-			throw new Error(name);
-		}
-		throw f.err();
+
+		String name = f.car().str();
+
+		for (Axiom axiom : getAxioms())
+			if (name.equals(axiom.getName()))
+				return axiom.call(this, f.cdr(), args);
+
+		throw new Error(name);
 	}
 
-	public static Thing eval(Thing d, Axiom[] axioms) {
-		if (d instanceof Atom) {
-			String name = d.str();
-			for (Axiom axiom : axioms)
-				if (name.equals(axiom.getName()))
-					return d;
-			// TODO: implement a lookup table.
-			return d;
-		}
-		else if (d instanceof Cons) {
-			if (d.nil())
-				return d;
-			return evalAxiom(eval(d.car(), axioms), d.cdr(), axioms);
-		}
-		throw d.err();
+	public Thing eval(Thing d) {
+		return (d instanceof Atom || d.nil()) ? d : evalAxiom(d.car(), d.cdr());
 	}
 
-	public static Thing evalAll(Thing d, Axiom[] axioms) {
-		
+	//// All static beyond this point.
+
+	public static class Axiom {
+		abstract public String getName();
+		abstract public Thing call(LispMachine machine, List data, List args);
 	}
 
 	/// Object model.
@@ -74,8 +60,6 @@ public class LispMachine {
 		// list methods
 		public Thing car() { throw err(); }
 		public Cons cdr() { throw err(); }
-		public void push(Thing x) { throw err(); }
-		public Thing pop() { throw err(); }
 
 		// all methods
 		abstract public boolean nil();
@@ -99,15 +83,13 @@ public class LispMachine {
 	}
 
 	final public static class Cons extends Thing {
-		private Thing a;
-		private Cons b;
+		final private Thing a;
+		final private Cons b;
 		public Cons() { a = b = null; }
 		public Cons(Thing ia, Cons ib) { a = ia; b = ib; }
 
 		public Thing car() { return a; }
 		public Cons cdr() { return b; }
-		public void push(Thing x) { b = new Cons(a, b); a = x; }
-		public Thing pop() { Thing r = a; a = b.car(); b = b.cdr(); return r; }
 
 		public boolean nil() { return a == null; }
 		public void toStringBuilder(StringBuilder sb) {
@@ -204,7 +186,7 @@ public class LispMachine {
 				}
 				assert ch() == q;
 				i++;
-				ret = cons(atom("quote"), cons(atom(sb.toString()), cons()));
+				ret = atom(sb.toString());
 				break;
 			default:
 				j = i;
