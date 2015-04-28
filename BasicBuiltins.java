@@ -20,6 +20,7 @@ public class BasicBuiltins {
 		LogicalBuiltins.install();
 		CollectionBuiltins.install();
 		StringBuiltins.install();
+		JavaBuiltins.install();
 
 		BeeEye.GLOBAL_SCOPE.put("print", new Macro() {
 			public Object call(List args, Map<String, Object> scope) {
@@ -34,6 +35,8 @@ public class BasicBuiltins {
 				return args.get(args.size() - 1);
 			}
 		});
+
+		
 
 		return installed = true;
 	}
