@@ -1,3 +1,4 @@
+import java.lang.reflect.Method;
 import java.io.InputStream;
 import java.util.Collection;
 import java.util.HashMap;
@@ -12,12 +13,75 @@ public class BeeEye {
 		run(slurp(System.in));
 	}
 
+	/// convenience functions
+
 	public static String slurp(InputStream input) {
 		try {
 			byte[] buffer = new byte[input.available()];
 			int length = input.read(buffer);
 			input.close();
 			return new String(buffer, 0, length);
+		}
+		catch (Exception e) {
+			throw new Error(e);
+		}
+	}
+
+	/// things that are operators in java that should really be functions.
+
+	public static boolean lessThan(Object a, Object b) {
+		if (a instanceof Number && b instanceof Number)
+			return ((Number) a).doubleValue() < ((Number) b).doubleValue();
+		return ((Comparable) a).compareTo(b) < 0;
+	}
+
+	public static boolean not(boolean x) {
+		return !x;
+	}
+
+	/// Reflection utils.
+
+	public static Class[] getTypes(Object[] args) {
+		Class[] types = new Class[args.length];
+		for (int i = 0; i < args.length; i++)
+			types[i] = args[i] == null ? Object.class : args[i].getClass();
+		return types;
+	}
+
+	public static boolean typesMatch(Class a, Class b) {
+		if (a.equals(int.class)) a = Integer.class;
+		else if (a.equals(long.class)) a = Long.class;
+		else if (a.equals(float.class)) a = Float.class;
+		else if (a.equals(double.class)) a = Double.class;
+		else if (a.equals(char.class)) a = Character.class;
+		else if (a.equals(boolean.class)) a = Boolean.class;
+		return a.isAssignableFrom(b);
+	}
+
+	public static boolean methodMatches(Method method, String name, Class[] types) {
+		if (!method.getName().equals(name))
+			return false;
+
+		Class[] mtypes = method.getParameterTypes();
+
+		if (!method.isVarArgs() && mtypes.length != types.length)
+			return false;
+
+		int upper = mtypes.length - (method.isVarArgs() ? 1 : 0);
+
+		for (int i = 0; i < upper; i++)
+			if (!typesMatch(mtypes[i], types[i]))
+				return false;
+
+		return true;
+	}
+
+	public static Method findMethod(Class c, String name, Class[] types) {
+		try {
+			for (Method method : c.getDeclaredMethods())
+				if (methodMatches(method, name, types))
+					return method;
+			return c.getMethod(name, types);
 		}
 		catch (Exception e) {
 			throw new Error(e);
@@ -198,6 +262,10 @@ public class BeeEye {
 
 	static {
 
+		/// Give prelude a reference to BeeEye.
+		/// This way, even if we change packages, we can still uniformly reference it.
+		GLOBAL_SCOPE.put("BeeEye", BeeEye.class);
+
 		/// language axioms
 
 		GLOBAL_SCOPE.put("eq", new Macro() {
@@ -218,7 +286,7 @@ public class BeeEye {
 			public Object call(List args, Map<String, Object> scope) {
 				for (List pair : (List<List>) args) {
 					if (truthy(eval(pair.get(0), scope)))
-						return eval(pair.get(1), scope);
+						return evalAll(new ArrayList(pair.subList(1, pair.size())), scope);
 				}
 				return false;
 			}
@@ -235,7 +303,7 @@ public class BeeEye {
 							execScope.put(
 								(String) names.get(i),
 								eval(args.get(i), argScope));
-						return eval(body, execScope);
+						return evalAll(body, execScope);
 					}
 				};
 			}
@@ -254,6 +322,7 @@ public class BeeEye {
 
 		GLOBAL_SCOPE.put("true", true);
 		GLOBAL_SCOPE.put("false", false);
+		GLOBAL_SCOPE.put("null", null);
 
 		GLOBAL_SCOPE.put("macro", new Macro() {
 			public Object call(List args, Map<String, Object> scope) {
@@ -323,12 +392,13 @@ public class BeeEye {
 					String name = (String) eval(args.get(1), scope);
 					Class c = x.getClass();
 					Object[] methodArgs = new Object[args.size() - 2];
-					Class[] methodTypes = new Class[args.size() - 2];
-					for (int i = 2; i < args.size(); i++) {
+
+					for (int i = 2; i < args.size(); i++)
 						methodArgs[i-2] = eval(args.get(i), scope);
-						methodTypes[i-2] = methodArgs[i-2].getClass();
-					}
-					return c.getDeclaredMethod(name, methodTypes).invoke(x, methodArgs);
+
+					Class[] methodTypes = getTypes(methodArgs);
+
+					return findMethod(c, name, methodTypes).invoke(x, methodArgs);
 				}
 				catch (Exception e) {
 					throw new Error(e);
@@ -342,12 +412,13 @@ public class BeeEye {
 					Class c = (Class) eval(args.get(0), scope);
 					String name = (String) eval(args.get(1), scope);
 					Object[] methodArgs = new Object[args.size() - 2];
-					Class[] methodTypes = new Class[args.size() - 2];
-					for (int i = 2; i < args.size(); i++) {
+
+					for (int i = 2; i < args.size(); i++)
 						methodArgs[i-2] = eval(args.get(i), scope);
-						methodTypes[i-2] = methodArgs[i-2].getClass();
-					}
-					return c.getDeclaredMethod(name, methodTypes).invoke(null, methodArgs);
+
+					Class[] methodTypes = getTypes(methodArgs);
+
+					return findMethod(c, name, methodTypes).invoke(null, methodArgs);
 				}
 				catch (Exception e) {
 					throw new Error(e);
