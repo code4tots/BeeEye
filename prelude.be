@@ -1,9 +1,9 @@
 (label comment (macro (args scope)))
 
-(comment
+(comment ============================================================
 	Hello world! I am a comment.)
 
-(comment
+(comment ============================================================
 	Some super basic things ...)
 
 (label print (lambda (x)
@@ -39,5 +39,8 @@
 			(cond
 				((< (eval (invoke-method args 'size') scope) 3) null)
 				(true (eval (invoke-method args 'get' 2) scope)))))))
+
+(comment ============================================================
+	Shell)
 
 (print (if 0 'condition was true' 'condition was false'))
