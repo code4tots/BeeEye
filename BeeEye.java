@@ -1,13 +1,4 @@
-/*
-
-Uses java types
-
-	String
-	ArrayList
-	HashMap
-
-*/
-
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,9 +9,22 @@ import java.util.List;
 public class BeeEye {
 
 	public static void main(String[] args) {
-		BasicBuiltins.install();
-		run("(print 'hi')");
+		run(slurp(System.in));
 	}
+
+	public static String slurp(InputStream input) {
+		try {
+			byte[] buffer = new byte[input.available()];
+			int length = input.read(buffer);
+			input.close();
+			return new String(buffer, 0, length);
+		}
+		catch (Exception e) {
+			throw new Error(e);
+		}
+	}
+
+	/// eval
 
 	public final static Map<String, Object> GLOBAL_SCOPE = new HashMap<String, Object>();
 
@@ -68,15 +72,288 @@ public class BeeEye {
 	}
 
 	public static boolean truthy(Object x) {
-		if (x instanceof Boolean) {
-			return (Boolean) x;
+		return
+			(x instanceof Boolean) ? (Boolean) x :
+			(x instanceof String) ? ((String) x).length() > 0 :
+			(x instanceof Number) ? ((Number) x).doubleValue() != 0 :
+			(x instanceof Collection) ? ((Collection) x).size() > 0 :
+			true;
+	}
+
+	/// Parser
+
+	public static class Parser {
+
+		public static ArrayList parse(String s) {
+			Parser parser = new Parser(s);
+			ArrayList result = parser.parseMany();
+			assert parser.fin();
+			return result;
 		}
-		if (x instanceof Number) {
-			return ((Number) x).doubleValue() != 0;
+
+		private String s;
+		private int i;
+
+		public Parser(String ss) {
+			s = ss;
+			i = 0;
 		}
-		if (x instanceof Collection) {
-			return ((Collection) x).size() > 0;
+
+		public char ch() {
+			return s.charAt(i);
 		}
-		return true;
+
+		public boolean fin() {
+			return i >= s.length();
+		}
+
+		public void skipSpaces() {
+			while (!fin() && Character.isWhitespace(ch()))
+				i++;
+		}
+
+		public ArrayList parseMany() {
+			skipSpaces();
+			if (fin() || ch() == ')')
+				return new ArrayList();
+			else {
+				Object x = parseOne();
+				ArrayList list = parseMany();
+				list.add(0, x);
+				return list;
+			}
+		}
+
+		public Object parseOne() {
+			Object ret;
+			char q;
+			int j;
+			StringBuilder sb;
+			switch(ch()){
+			case '(':
+				i++;
+				ret = parseMany();
+				assert ch() == ')';
+				i++;
+				break;
+			case ')': throw new Error();
+			case '"':
+			case '\'':
+				sb = new StringBuilder();
+				q = ch();
+				j = i;
+				i++;
+				while (ch() != q) {
+					if (ch() == '\\') {
+						i++;
+						switch(ch()) {
+						case '\\': sb.append('\\'); break;
+						case '"': sb.append('"'); break;
+						case '\'': sb.append('\''); break;
+						case 'n': sb.append('\n'); break;
+						case 't': sb.append('\t'); break;
+						default: throw new Error(Character.toString(ch()));
+						}
+					}
+					else {
+						sb.append(ch());
+					}
+					i++;
+				}
+				assert ch() == q;
+				i++;
+				ArrayList list = new ArrayList();
+				list.add("quote");
+				list.add(sb.toString());
+				ret = list;
+				break;
+			default:
+				j = i;
+				while (
+						!fin() && ch() != '(' && ch() != ')' &&
+						ch() != '"' && ch() != '\'' &&
+						!Character.isWhitespace(ch()))
+					i++;
+				String t = s.substring(j, i);
+				if (t.matches("[0-9]+"))
+					ret = Integer.parseInt(t);
+				else if (t.matches("[0-9]*\\.[0-9]+|[0-9]+\\."))
+					ret = Double.parseDouble(t);
+				else {
+					ret = t;
+				}
+				break;
+			}
+			return ret;
+		}
+	}
+
+	/// Macro
+
+	abstract public static class Macro {
+		abstract public Object call(List args, Map<String, Object> scope);
+	}
+
+	/// Builtins
+
+	static {
+
+		/// language axioms
+
+		GLOBAL_SCOPE.put("eq", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				return
+					eval(args.get(0), scope) ==
+					eval(args.get(1), scope);
+			}
+		});
+
+		GLOBAL_SCOPE.put("quote", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				return args.get(0);
+			}
+		});
+
+		GLOBAL_SCOPE.put("cond", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				for (List pair : (List<List>) args) {
+					if (truthy(eval(pair.get(0), scope)))
+						return eval(pair.get(1), scope);
+				}
+				return false;
+			}
+		});
+
+		GLOBAL_SCOPE.put("lambda", new Macro() {
+			public Object call(List args, final Map<String, Object> scope) {
+				final List names = (List) args.get(0);
+				final List body = new ArrayList(args.subList(1, args.size()));
+				return new Macro() {
+					public Object call(List args, Map<String, Object> argScope) {
+						Map<String, Object> execScope = newScope(scope);
+						for (int i = 0; i < names.size(); i++)
+							execScope.put(
+								(String) names.get(i),
+								eval(args.get(i), argScope));
+						return eval(body, execScope);
+					}
+				};
+			}
+		});
+
+		GLOBAL_SCOPE.put("label", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				String name = (String) args.get(0);
+				Object value = eval(args.get(1), scope);
+				scope.put(name, value);
+				return value;
+			}
+		});
+
+		/// Other conveniences
+
+		GLOBAL_SCOPE.put("true", true);
+		GLOBAL_SCOPE.put("false", false);
+
+		GLOBAL_SCOPE.put("macro", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				final List names = (List) args.get(0);
+				final List body = new ArrayList(args.subList(1, args.size()));
+				return new Macro() {
+					public Object call(List macroArgs, Map<String, Object> macroScope) {
+						Map<String, Object> execScope = newScope(scope);
+						execScope.put((String) names.get(0), macroArgs);
+						execScope.put((String) names.get(1), macroScope);
+						return evalAll(body, execScope);
+					}
+				};
+			}
+		});
+
+		/// Java reflection functions
+
+		GLOBAL_SCOPE.put("get-class", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				return eval(args.get(0), scope).getClass();
+			}
+		});
+
+		GLOBAL_SCOPE.put("get-class-by-name", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				try {
+					return Class.forName((String) eval(args.get(0), scope));
+				}
+				catch (Exception e) {
+					throw new Error(e);
+				}
+			}
+		});
+
+		GLOBAL_SCOPE.put("get-field", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				try {
+					Object x = eval(args.get(0), scope);
+					String name = (String) eval(args.get(1), scope);
+					Class c = x.getClass();
+					return c.getDeclaredField(name).get(x);
+				}
+				catch (Exception e) {
+					throw new Error(e);
+				}
+			}
+		});
+
+		GLOBAL_SCOPE.put("get-static-field", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				try {
+					Class c = (Class) eval(args.get(0), scope);
+					String name = (String) eval(args.get(1), scope);
+					return c.getDeclaredField(name).get(null);
+				}
+				catch (Exception e) {
+					throw new Error(e);
+				}
+			}
+		});
+
+		GLOBAL_SCOPE.put("invoke-method", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				try {
+					Object x = eval(args.get(0), scope);
+					String name = (String) eval(args.get(1), scope);
+					Class c = x.getClass();
+					Object[] methodArgs = new Object[args.size() - 2];
+					Class[] methodTypes = new Class[args.size() - 2];
+					for (int i = 2; i < args.size(); i++) {
+						methodArgs[i-2] = eval(args.get(i), scope);
+						methodTypes[i-2] = methodArgs[i-2].getClass();
+					}
+					return c.getDeclaredMethod(name, methodTypes).invoke(x, methodArgs);
+				}
+				catch (Exception e) {
+					throw new Error(e);
+				}
+			}
+		});
+
+		GLOBAL_SCOPE.put("invoke-static-method", new Macro() {
+			public Object call(List args, Map<String, Object> scope) {
+				try {
+					Class c = (Class) eval(args.get(0), scope);
+					String name = (String) eval(args.get(1), scope);
+					Object[] methodArgs = new Object[args.size() - 2];
+					Class[] methodTypes = new Class[args.size() - 2];
+					for (int i = 2; i < args.size(); i++) {
+						methodArgs[i-2] = eval(args.get(i), scope);
+						methodTypes[i-2] = methodArgs[i-2].getClass();
+					}
+					return c.getDeclaredMethod(name, methodTypes).invoke(null, methodArgs);
+				}
+				catch (Exception e) {
+					throw new Error(e);
+				}
+			}
+		});
+
 	}
 }
