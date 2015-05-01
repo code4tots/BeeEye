@@ -1,4 +1,4 @@
-(label comment (macro (args scope)))
+(label comment (macro (scope)))
 
 (comment ============================================================
 	Hello world! I am a comment.)
@@ -28,19 +28,20 @@
 
 (label >= (lambda (a b) (not (< a b))))
 
-(label eval (lambda (d scope)
-	(invoke-static-method BeeEye 'eval' d scope)))
+(label eval (lambda (scope d)
+	(invoke-static-method BeeEye 'eval' scope d)))
 
-(label if (macro (args scope)
+(label if (macro* (scope c a args)
 	(cond
-		((eval (invoke-method args 'get' 0) scope)
-			(eval (invoke-method args 'get' 1) scope))
+		((eval scope c)
+			(eval scope a))
 		(true
 			(cond
-				((< (eval (invoke-method args 'size') scope) 3) null)
-				(true (eval (invoke-method args 'get' 2) scope)))))))
+				((< (eval scope (invoke-method args 'size')) 1) null)
+				(true (eval scope (invoke-method args 'get' 0))))))))
 
 (comment ============================================================
 	Shell)
 
 (print (if 0 'condition was true' 'condition was false'))
+(print (if 0 'condition was true'))

@@ -92,23 +92,23 @@ public class BeeEye {
 
 	public final static Map<String, Object> GLOBAL_SCOPE = new HashMap<String, Object>();
 
-	public static Object eval(Object d, Map<String, Object> scope) {
+	public static Object eval(Map<String, Object> scope, Object d) {
 		if (d instanceof String)
 			return lookup(scope, (String) d);
 		if (d instanceof List) {
-			Macro m = (Macro) eval(((List) d).get(0), scope);
+			Macro m = (Macro) eval(scope, ((List) d).get(0));
 			List args = new ArrayList(((List) d).subList(1, ((List) d).size()));
-			return m.call(args, scope);
+			return m.call(scope, args);
 		}
 		if (d instanceof Integer || d instanceof Double)
 			return d;
 		throw new Error(d.getClass().toString());
 	}
 
-	public static Object evalAll(List dd, Map<String, Object> scope) {
+	public static Object evalAll(Map<String, Object> scope, List dd) {
 		Object last = null;
 		for (Object d : dd) {
-			last = eval(d, scope);
+			last = eval(scope, d);
 		}
 		return last;
 	}
@@ -128,11 +128,11 @@ public class BeeEye {
 	}
 
 	public static Object run(String text) {
-		return run(text, GLOBAL_SCOPE);
+		return run(GLOBAL_SCOPE, text);
 	}
 
-	public static Object run(String text, Map<String, Object> scope) {
-		return evalAll(Parser.parse(text), scope);
+	public static Object run(Map<String, Object> scope, String text) {
+		return evalAll(scope, Parser.parse(text));
 	}
 
 	public static boolean truthy(Object x) {
@@ -255,7 +255,7 @@ public class BeeEye {
 	/// Macro
 
 	abstract public static class Macro {
-		abstract public Object call(List args, Map<String, Object> scope);
+		abstract public Object call(Map<String, Object> scope, List args);
 	}
 
 	/// Builtins
@@ -269,50 +269,50 @@ public class BeeEye {
 		/// language axioms
 
 		GLOBAL_SCOPE.put("eq", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				return
-					eval(args.get(0), scope) ==
-					eval(args.get(1), scope);
+					eval(scope, args.get(0)) ==
+					eval(scope, args.get(1));
 			}
 		});
 
 		GLOBAL_SCOPE.put("quote", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				return args.get(0);
 			}
 		});
 
 		GLOBAL_SCOPE.put("cond", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				for (List pair : (List<List>) args) {
-					if (truthy(eval(pair.get(0), scope)))
-						return evalAll(new ArrayList(pair.subList(1, pair.size())), scope);
+					if (truthy(eval(scope, pair.get(0))))
+						return evalAll(scope, new ArrayList(pair.subList(1, pair.size())));
 				}
 				return false;
 			}
 		});
 
 		GLOBAL_SCOPE.put("lambda", new Macro() {
-			public Object call(List args, final Map<String, Object> scope) {
+			public Object call(final Map<String, Object> scope, final List args) {
 				final List names = (List) args.get(0);
 				final List body = new ArrayList(args.subList(1, args.size()));
 				return new Macro() {
-					public Object call(List args, Map<String, Object> argScope) {
+					public Object call(Map<String, Object> argScope, List args) {
 						Map<String, Object> execScope = newScope(scope);
 						for (int i = 0; i < names.size(); i++)
 							execScope.put(
 								(String) names.get(i),
-								eval(args.get(i), argScope));
-						return evalAll(body, execScope);
+								eval(argScope, args.get(i)));
+						return evalAll(execScope, body);
 					}
 				};
 			}
 		});
 
 		GLOBAL_SCOPE.put("label", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				String name = (String) args.get(0);
-				Object value = eval(args.get(1), scope);
+				Object value = eval(scope, args.get(1));
 				scope.put(name, value);
 				return value;
 			}
@@ -324,16 +324,59 @@ public class BeeEye {
 		GLOBAL_SCOPE.put("false", false);
 		GLOBAL_SCOPE.put("null", null);
 
-		GLOBAL_SCOPE.put("macro", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+		GLOBAL_SCOPE.put("lambda*", new Macro() {
+			public Object call(final Map<String, Object> scope, List args) {
 				final List names = (List) args.get(0);
 				final List body = new ArrayList(args.subList(1, args.size()));
 				return new Macro() {
-					public Object call(List macroArgs, Map<String, Object> macroScope) {
+					public Object call(Map<String, Object> argScope, List args) {
 						Map<String, Object> execScope = newScope(scope);
-						execScope.put((String) names.get(0), macroArgs);
-						execScope.put((String) names.get(1), macroScope);
-						return evalAll(body, execScope);
+						for (int i = 0; i < names.size() - 1; i++)
+							execScope.put(
+								(String) names.get(i),
+								eval(argScope, args.get(i)));
+						List rest = new ArrayList();
+						for (int i = names.size() - 1; i < args.size(); i++)
+							rest.add(eval(argScope, args.get(i)));
+						execScope.put((String) names.get(names.size() - 1), rest);
+						return evalAll(execScope, body);
+					}
+				};
+			}
+		});
+
+		GLOBAL_SCOPE.put("macro", new Macro() {
+			public Object call(Map<String, Object> scope, List args) {
+				final List names = (List) args.get(0);
+				final List body = new ArrayList(args.subList(1, args.size()));
+				return new Macro() {
+					public Object call(Map<String, Object> macroScope, List macroArgs) {
+						Map<String, Object> execScope = newScope(scope);
+						execScope.put((String) names.get(0), macroScope);
+						for (int i = 1; i < names.size(); i++)
+							execScope.put((String) names.get(i), macroArgs.get(i-1));
+						return evalAll(execScope, body);
+					}
+				};
+			}
+		});
+
+		GLOBAL_SCOPE.put("macro*", new Macro() {
+			public Object call(Map<String, Object> scope, List args) {
+				final List names = (List) args.get(0);
+				final List body = new ArrayList(args.subList(1, args.size()));
+				return new Macro() {
+					public Object call(Map<String, Object> macroScope, List macroArgs) {
+						Map<String, Object> execScope = newScope(scope);
+						execScope.put((String) names.get(0), macroScope);
+						for (int i = 1; i < names.size() - 1; i++)
+							execScope.put((String) names.get(i), macroArgs.get(i-1));
+						List rest = new ArrayList();
+						for (int i = names.size() - 2; i < macroArgs.size(); i++)
+							rest.add(macroArgs.get(i));
+						execScope.put((String) names.get(names.size() - 1), rest);
+						return evalAll(execScope, body);
+
 					}
 				};
 			}
@@ -342,15 +385,15 @@ public class BeeEye {
 		/// Java reflection functions
 
 		GLOBAL_SCOPE.put("get-class", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
-				return eval(args.get(0), scope).getClass();
+			public Object call(Map<String, Object> scope, List args) {
+				return eval(scope, args.get(0)).getClass();
 			}
 		});
 
 		GLOBAL_SCOPE.put("get-class-by-name", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				try {
-					return Class.forName((String) eval(args.get(0), scope));
+					return Class.forName((String) eval(scope, args.get(0)));
 				}
 				catch (Exception e) {
 					throw new Error(e);
@@ -359,10 +402,10 @@ public class BeeEye {
 		});
 
 		GLOBAL_SCOPE.put("get-field", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				try {
-					Object x = eval(args.get(0), scope);
-					String name = (String) eval(args.get(1), scope);
+					Object x = eval(scope, args.get(0));
+					String name = (String) eval(scope, args.get(1));
 					Class c = x.getClass();
 					return c.getDeclaredField(name).get(x);
 				}
@@ -373,10 +416,10 @@ public class BeeEye {
 		});
 
 		GLOBAL_SCOPE.put("get-static-field", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				try {
-					Class c = (Class) eval(args.get(0), scope);
-					String name = (String) eval(args.get(1), scope);
+					Class c = (Class) eval(scope, args.get(0));
+					String name = (String) eval(scope, args.get(1));
 					return c.getDeclaredField(name).get(null);
 				}
 				catch (Exception e) {
@@ -386,15 +429,15 @@ public class BeeEye {
 		});
 
 		GLOBAL_SCOPE.put("invoke-method", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				try {
-					Object x = eval(args.get(0), scope);
-					String name = (String) eval(args.get(1), scope);
+					Object x = eval(scope, args.get(0));
+					String name = (String) eval(scope, args.get(1));
 					Class c = x.getClass();
 					Object[] methodArgs = new Object[args.size() - 2];
 
 					for (int i = 2; i < args.size(); i++)
-						methodArgs[i-2] = eval(args.get(i), scope);
+						methodArgs[i-2] = eval(scope, args.get(i));
 
 					Class[] methodTypes = getTypes(methodArgs);
 
@@ -407,14 +450,14 @@ public class BeeEye {
 		});
 
 		GLOBAL_SCOPE.put("invoke-static-method", new Macro() {
-			public Object call(List args, Map<String, Object> scope) {
+			public Object call(Map<String, Object> scope, List args) {
 				try {
-					Class c = (Class) eval(args.get(0), scope);
-					String name = (String) eval(args.get(1), scope);
+					Class c = (Class) eval(scope, args.get(0));
+					String name = (String) eval(scope, args.get(1));
 					Object[] methodArgs = new Object[args.size() - 2];
 
 					for (int i = 2; i < args.size(); i++)
-						methodArgs[i-2] = eval(args.get(i), scope);
+						methodArgs[i-2] = eval(scope, args.get(i));
 
 					Class[] methodTypes = getTypes(methodArgs);
 
